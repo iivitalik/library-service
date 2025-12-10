@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from library.models import Book, Borrowing, Payment
+from library.models import Book, Borrowing
 
 
 class BookSerializer(serializers.ModelSerializer):
@@ -13,6 +13,3 @@ class BorrowingSerializer(serializers.ModelSerializer):
     fields = "__all__"
 
 
-class PaymentSerializer(serializers.ModelSerializer):
-    model = Payment
-    fields = "__all__"
