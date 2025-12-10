@@ -4,12 +4,12 @@ from library.models import Book, Borrowing
 
 
 class BookSerializer(serializers.ModelSerializer):
-    model = Book
-    fields = "__all__"
+    class Meta:
+        model = Book
+        fields = "__all__"
 
 
 class BorrowingSerializer(serializers.ModelSerializer):
-    model = Borrowing
-    fields = "__all__"
-
-
+    class Meta:
+        model = Borrowing
+        fields = "__all__"
