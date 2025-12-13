@@ -8,23 +8,23 @@ from user.models import User
 
 class Book(models.Model):
     class CoverChoices(models.TextChoices):
-        HARD = "Hard"
-        SOFT = "Soft"
+        HARD = "HARD"
+        SOFT = "SOFT"
 
-    title = models.CharField(max_length=100)
-    author = models.CharField(max_length=100)
+    title = models.CharField(max_length=255)
+    author = models.CharField(max_length=255)
     inventory = models.PositiveIntegerField(
-        default=0,
+        default=1,
         validators=[MinValueValidator(0)]
     )
     daily_fee = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        default=0.00,
-        validators=[MinValueValidator(0)]
+        default=1.00,
+        validators=[MinValueValidator(0.01)]
     )
     cover = models.CharField(
-        max_length=10,
+        max_length=4,
         choices=CoverChoices.choices,
         default=CoverChoices.HARD,
     )
@@ -32,45 +32,29 @@ class Book(models.Model):
     def __str__(self):
         return self.title
 
+    @property
     def is_available(self):
         return self.inventory > 0
-
-    def borrow(self, user, days=14):
-        if not self.is_available():
-            raise ValidationError(f"Book {self.title} is unavailable")
-
-        self.inventory -= 1
-        self.save()
-
-        borrowing = Borrowing.objects.create(
-            user=user,
-            book=self,
-            expected_return_date=timezone.now().date() + timedelta(days=days),
-            daily_fee=self.daily_fee
-        )
-
-        return borrowing
 
 
 class Borrowing(models.Model):
     borrow_date = models.DateField(auto_now_add=True)
     expected_return_date = models.DateField()
     actual_return_date = models.DateField(null=True, blank=True)
-    daily_fee = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        default=0.00,
-        validators=[MinValueValidator(0)]
-    )
 
-    book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name='borrowings')
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='borrowings')
+    book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name="borrowings")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="borrowings")
 
     class Meta:
-        ordering = ['-borrow_date']
+        ordering = ["-borrow_date"]
 
     def __str__(self):
         return f"{self.book.title} return by {self.expected_return_date}"
+
+    def save(self, *args, **kwargs):
+        if not self.pk:
+            self.expected_return_date = timezone.now().date() + timedelta(days=14)
+        super().save(*args, **kwargs)
 
     @property
     def is_active(self):
@@ -90,6 +74,17 @@ class Borrowing(models.Model):
 
         self.book.inventory += 1
         self.book.save()
+
+        Payment.objects.create(
+            borrowing=self,
+            type=Payment.TypeChoices.PAYMENT
+        )
+
+        if self.is_overdue():
+            Payment.objects.create(
+                borrowing=self,
+                type=Payment.TypeChoices.FINE
+            )
 
 
 class Payment(models.Model):
@@ -111,7 +106,11 @@ class Payment(models.Model):
         default=TypeChoices.PAYMENT,
         choices=TypeChoices.choices
     )
-    borrowing = models.ForeignKey(Borrowing, on_delete=models.CASCADE, related_name='payments')
+    borrowing = models.ForeignKey(
+        Borrowing,
+        on_delete=models.CASCADE,
+        related_name='payments'
+    )
     session_url = models.URLField(max_length=555, blank=True)
     session_id = models.CharField(max_length=100, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -137,7 +136,7 @@ class Payment(models.Model):
         if self.type == self.TypeChoices.PAYMENT:
             days = (self.borrowing.expected_return_date - self.borrowing.borrow_date).days
             days = max(days, 1)
-            return float(days * self.borrowing.daily_fee)
+            return float(days * self.borrowing.book.daily_fee)
 
         elif self.type == self.TypeChoices.FINE:
             if self.borrowing.actual_return_date:
@@ -148,6 +147,6 @@ class Payment(models.Model):
             if overdue_days <= 0:
                 return 0.0
 
-            return float(overdue_days * self.borrowing.daily_fee * 2)
+            return float(overdue_days * self.borrowing.book.daily_fee * 2)
 
         return 0.0
