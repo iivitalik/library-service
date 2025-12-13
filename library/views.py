@@ -1,9 +1,23 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from drf_spectacular.utils import extend_schema_view, extend_schema
 
 from library.models import Book, Borrowing
 from library.serializers import BookSerializer, BorrowingSerializer
+
+
+@extend_schema_view(
+    list=extend_schema(description="Get list of all books"),
+    create=extend_schema(description="Create new book"),
+    retrieve=extend_schema(description="Get single book details"),
+    update=extend_schema(description="Update book completely"),
+    partial_update=extend_schema(description="Update book partially"),
+    destroy=extend_schema(description="Delete book"),
+)
+class BookViewSet(viewsets.ModelViewSet):
+    queryset = Book.objects.all()
+    serializer_class = BookSerializer
 
 
 class BorrowingViewSet(viewsets.ModelViewSet):
@@ -64,6 +78,9 @@ class BorrowingViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+    @extend_schema(
+        description="Return a book. Creates payment and fines if overdue."
+    )
     @action(detail=True, methods=["post"])
     def return_book(self, request, pk=None):
         borrowing = self.get_object()
@@ -79,8 +96,3 @@ class BorrowingViewSet(viewsets.ModelViewSet):
                 {'error': str(e)},
                 status=400
             )
-
-
-class BookViewSet(viewsets.ModelViewSet):
-    queryset = Book.objects.all()
-    serializer_class = BookSerializer
